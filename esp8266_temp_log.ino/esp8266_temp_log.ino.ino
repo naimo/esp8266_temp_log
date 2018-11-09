@@ -106,7 +106,7 @@ void setup() {
 
       wifi_enable = 0;
       ESP.rtcUserMemoryWrite(WIFI_ENABLE_OFFSET, (uint32_t*) &wifi_enable, sizeof(wifi_enable));
-      ESP.deepSleep(10 * 300000, WAKE_RF_DISABLED);
+      ESP.deepSleep(600 * 300000, WAKE_RF_DISABLED);
     }
     // measurement mode
     default:
@@ -167,7 +167,7 @@ void setup() {
             
       wifi_enable = WIFI_ENABLE_MAGIC;
       ESP.rtcUserMemoryWrite(WIFI_ENABLE_OFFSET, (uint32_t*) &wifi_enable, sizeof(wifi_enable));     
-      ESP.deepSleep(10 * 300000, WAKE_RF_DEFAULT);
+      ESP.deepSleep(1, WAKE_RF_DEFAULT);
     }
   }
 }
