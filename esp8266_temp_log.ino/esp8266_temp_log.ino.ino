@@ -23,6 +23,11 @@ uint32_t wifi_enable;
 
 #define LAST_MEASUREMENT_OFFSET 1
 
+typedef struct {
+  uint32_t bat;
+  TempAndHumidity dhtdata;
+} rtcData;
+
 void setup() {  
   ESP.rtcUserMemoryRead(WIFI_ENABLE_OFFSET, (uint32_t*) &wifi_enable, sizeof(wifi_enable));
 
@@ -72,25 +77,20 @@ void setup() {
         }
       }
       
-      TempAndHumidity values;
-      ESP.rtcUserMemoryRead(LAST_MEASUREMENT_OFFSET, (uint32_t*) &values, sizeof(values));
-   
-      #ifdef DEBUG     
-        // Just debug messages
-        Serial.print( "Sending temperature and humidity : [" );
-        Serial.print( values.temperature, DEC );
-        Serial.print( "," );
-        Serial.print( values.humidity, DEC );
-        Serial.print( "]   -> " );
-      #endif
-      
-      String temperature = String(values.temperature);
-      String humidity = String(values.humidity);
+      rtcData rtcdata;
+      ESP.rtcUserMemoryRead(LAST_MEASUREMENT_OFFSET, (uint32_t*) &rtcdata, sizeof(rtcdata));
+         
+      String temperature = String(rtcdata.dhtdata.temperature);
+      String humidity = String(rtcdata.dhtdata.humidity);
+      String batlevel = String(rtcdata.bat);
       
       // Prepare a JSON payload string
       String payload = "{";
-      payload += "\"temperature\":"; payload += temperature; payload += ",";
+      payload += "\"temperature\":"; payload += temperature;
+      payload += ",";
       payload += "\"humidity\":"; payload += humidity;
+      payload += ",";
+      payload += "\"battery\":"; payload += batlevel;
       payload += "}";
     
       // Send payload
@@ -106,11 +106,12 @@ void setup() {
 
       wifi_enable = 0;
       ESP.rtcUserMemoryWrite(WIFI_ENABLE_OFFSET, (uint32_t*) &wifi_enable, sizeof(wifi_enable));
-      ESP.deepSleep(10 * 1000000, WAKE_RF_DISABLED);
+      ESP.deepSleep(10 * 300000, WAKE_RF_DISABLED);
     }
     // measurement mode
     default:
     {
+      pinMode(A0, INPUT);      
       pinMode(D5, OUTPUT);
       digitalWrite(D5, HIGH);
       dht.setup(D6, DHTesp::DHT11); // D6
@@ -126,6 +127,7 @@ void setup() {
       values = dht.getTempAndHumidity();
     
       #ifdef DEBUG
+        Serial.println();
         Serial.print( "Thrown temperature and humidity : [" );
         Serial.print( values.temperature, DEC );
         Serial.print( "," );
@@ -148,12 +150,24 @@ void setup() {
         Serial.print( values.humidity, DEC );
         Serial.println( "]" );
       #endif
+
+      uint32_t bat = analogRead(A0);
+      // Empirical calibration
+      bat = bat*3700/720;
+      #ifdef DEBUG
+        Serial.print("Battery mV : ");
+        Serial.println(bat);    
+      #endif
+
+      rtcData rtcdata;
+      rtcdata.bat = bat;
+      rtcdata.dhtdata = values;
       
-      ESP.rtcUserMemoryWrite(LAST_MEASUREMENT_OFFSET, (uint32_t*) &values, sizeof(values));
+      ESP.rtcUserMemoryWrite(LAST_MEASUREMENT_OFFSET, (uint32_t*) &rtcdata, sizeof(rtcdata));
             
       wifi_enable = WIFI_ENABLE_MAGIC;
       ESP.rtcUserMemoryWrite(WIFI_ENABLE_OFFSET, (uint32_t*) &wifi_enable, sizeof(wifi_enable));     
-      ESP.deepSleep(10 * 1000000, WAKE_RF_DEFAULT);
+      ESP.deepSleep(10 * 300000, WAKE_RF_DEFAULT);
     }
   }
 }
