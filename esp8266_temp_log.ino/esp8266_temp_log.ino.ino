@@ -84,19 +84,18 @@ void setup() {
       String humidity = String(rtcdata.dhtdata.humidity);
       String batlevel = String(rtcdata.bat);
       
-      // Prepare a JSON payload string
-      String payload = "{";
-      payload += "\"temperature\":"; payload += temperature;
+      // Prepare an influxdb string
+      String payload = "dhtsensor ";
+      payload += "temperature="; payload += temperature;
       payload += ",";
-      payload += "\"humidity\":"; payload += humidity;
+      payload += "humidity="; payload += humidity;
       payload += ",";
-      payload += "\"battery\":"; payload += batlevel;
-      payload += "}";
+      payload += "battery="; payload += batlevel;
     
       // Send payload
       char attributes[100];
       payload.toCharArray( attributes, 100 );
-      client.publish( "v1/devices/me/telemetry", attributes );
+      client.publish( topic, attributes );
       #ifdef DEBUG
         Serial.println( attributes );
       #endif
@@ -106,7 +105,8 @@ void setup() {
 
       wifi_enable = 0;
       ESP.rtcUserMemoryWrite(WIFI_ENABLE_OFFSET, (uint32_t*) &wifi_enable, sizeof(wifi_enable));
-      ESP.deepSleep(600 * 300000, WAKE_RF_DISABLED);
+//      ESP.deepSleep(3600000000, WAKE_RF_DISABLED);
+      ESP.deepSleep(10000000, WAKE_RF_DISABLED);
     }
     // measurement mode
     default:
@@ -167,7 +167,7 @@ void setup() {
             
       wifi_enable = WIFI_ENABLE_MAGIC;
       ESP.rtcUserMemoryWrite(WIFI_ENABLE_OFFSET, (uint32_t*) &wifi_enable, sizeof(wifi_enable));     
-      ESP.deepSleep(1, WAKE_RF_DEFAULT);
+      ESP.deepSleep(1000000, WAKE_RF_DEFAULT);
     }
   }
 }
