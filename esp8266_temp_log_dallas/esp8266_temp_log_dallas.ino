@@ -1,6 +1,7 @@
 // Import required libraries
 #include "ESP8266WiFi.h"
-#include "DHTesp.h"
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include <PubSubClient.h>
 
 //#define DEBUG
@@ -14,7 +15,10 @@ IPAddress subnet(255,255,255,0);
 WiFiClient wificlient;
 PubSubClient client(wificlient);
 
-DHTesp dht;
+#define ONE_WIRE_BUS D6
+#define ONE_WIRE_POWER D7
+OneWire oneWire(ONE_WIRE_BUS); 
+DallasTemperature sensors(&oneWire);
 
 #define WIFI_ENABLE_MAGIC 0xF0F0
 #define WIFI_ENABLE_OFFSET 0
@@ -23,9 +27,11 @@ uint32_t wifi_enable;
 
 #define LAST_MEASUREMENT_OFFSET 1
 
+#define SLEEP_TIME 3600000000
+
 typedef struct {
   uint32_t bat;
-  TempAndHumidity dhtdata;
+  int temp;
 } rtcData;
 
 void setup() {  
@@ -40,12 +46,13 @@ void setup() {
         // Start Serial
         Serial.begin(115200);
         delay(10);
-        // We start by connecting to a WiFi network
         Serial.println();
+        Serial.println( "WIFI mode" );        
         Serial.print("Connecting to ");
         Serial.println(ssid); 
       #endif
 
+      // We start by connecting to a WiFi network
       WiFi.config(ip, gateway, subnet, dns);    
       WiFi.begin(ssid, password);
       while (WiFi.status() != WL_CONNECTED) {
@@ -80,15 +87,12 @@ void setup() {
       rtcData rtcdata;
       ESP.rtcUserMemoryRead(LAST_MEASUREMENT_OFFSET, (uint32_t*) &rtcdata, sizeof(rtcdata));
          
-      String temperature = String(rtcdata.dhtdata.temperature);
-      String humidity = String(rtcdata.dhtdata.humidity);
+      String temperature = String(rtcdata.temp);
       String batlevel = String(rtcdata.bat);
       
       // Prepare an influxdb string
-      String payload = "dhtsensor ";
+      String payload = "espsensor ";
       payload += "temperature="; payload += temperature;
-      payload += ",";
-      payload += "humidity="; payload += humidity;
       payload += ",";
       payload += "battery="; payload += batlevel;
     
@@ -105,50 +109,34 @@ void setup() {
 
       wifi_enable = 0;
       ESP.rtcUserMemoryWrite(WIFI_ENABLE_OFFSET, (uint32_t*) &wifi_enable, sizeof(wifi_enable));
-//      ESP.deepSleep(3600000000, WAKE_RF_DISABLED);
-      ESP.deepSleep(10000000, WAKE_RF_DISABLED);
+      ESP.deepSleep(SLEEP_TIME, WAKE_RF_DISABLED);
+      break;
     }
     // measurement mode
     default:
     {
-      pinMode(A0, INPUT);      
-      pinMode(D5, OUTPUT);
-      digitalWrite(D5, HIGH);
-      dht.setup(D6, DHTesp::DHT11); // D6
-
       #ifdef DEBUG
         // Start Serial
-        Serial.begin(115200);
-        delay(1000);
-      #endif
-      
-      TempAndHumidity values;    
-      // throw away first values;
-      values = dht.getTempAndHumidity();
-    
-      #ifdef DEBUG
+        Serial.begin(115200);      
         Serial.println();
-        Serial.print( "Thrown temperature and humidity : [" );
-        Serial.print( values.temperature, DEC );
-        Serial.print( "," );
-        Serial.print( values.humidity, DEC );
-        Serial.println( "]" );
+        Serial.println( "MEASURE mode" );
       #endif
       
-      delay(2000);
-         
-      // Reading temperature and humidity
-      values = dht.getTempAndHumidity();
-    
-      // shut dht immediately
-      pinMode(D5, INPUT);
+      pinMode(A0, INPUT);      
+      pinMode(ONE_WIRE_POWER, OUTPUT);
+      digitalWrite(ONE_WIRE_POWER, HIGH);
+      sensors.begin();
+      sensors.requestTemperatures(); 
+      
+      int temp;    
+      temp = sensors.getTempCByIndex(0);
+      
+      // shut sensor immediately
+      pinMode(ONE_WIRE_POWER, INPUT);
 
       #ifdef DEBUG
-        Serial.print( "Kept temperature and humidity : [" );
-        Serial.print( values.temperature, DEC );
-        Serial.print( "," );
-        Serial.print( values.humidity, DEC );
-        Serial.println( "]" );
+        Serial.print( "Temperature : " );
+        Serial.println( temp, DEC );
       #endif
 
       uint32_t bat = analogRead(A0);
@@ -161,13 +149,14 @@ void setup() {
 
       rtcData rtcdata;
       rtcdata.bat = bat;
-      rtcdata.dhtdata = values;
+      rtcdata.temp = temp;
       
       ESP.rtcUserMemoryWrite(LAST_MEASUREMENT_OFFSET, (uint32_t*) &rtcdata, sizeof(rtcdata));
             
       wifi_enable = WIFI_ENABLE_MAGIC;
       ESP.rtcUserMemoryWrite(WIFI_ENABLE_OFFSET, (uint32_t*) &wifi_enable, sizeof(wifi_enable));     
       ESP.deepSleep(1000000, WAKE_RF_DEFAULT);
+      break;
     }
   }
 }
